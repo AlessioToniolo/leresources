@@ -23,5 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# remove .env from gitignore
-.env
+# Firebase
+.firebase/
+
+# ignore firebase functions folder
+functions

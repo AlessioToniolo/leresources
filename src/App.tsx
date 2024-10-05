@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Mic, Volume2, Instagram } from 'lucide-react';
+import { Instagram } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
-import BusinessCard from './components/BusinessCard';
 import { businesses } from './data/businesses';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<{ text: string; isUser: boolean }[]>([]);
   const [input, setInput] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -17,73 +14,45 @@ const App: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    checkServerStatus();
-  }, []);
-
-  const checkServerStatus = async () => {
-    try {
-      const response = await fetch('/.netlify/functions/chat');
-      if (!response.ok) {
-        throw new Error('Server is not responding');
-      }
-    } catch (error) {
-      console.error('Server check failed:', error);
-      setError('Unable to connect to the server. Please try again later.');
-    }
-  };
-
   const handleSendMessage = async () => {
     if (input.trim()) {
-      setMessages([...messages, { text: input, isUser: true }]);
+      setMessages(prevMessages => [...prevMessages, { text: input, isUser: true }]);
       setInput('');
       setIsLoading(true);
       setError(null);
+
       try {
-        const botResponse = await getChatResponse(input);
-        setMessages(prev => [...prev, { text: botResponse, isUser: false }]);
+        const response = await fetch('https://us-central1-l-e-of-all-trades.cloudfunctions.net/chatFunction', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userInput: input, businesses }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Oops! Received non-JSON response from server");
+        }
+
+        const data = await response.json();
+        
+        if (data.text) {
+          setMessages(prevMessages => [...prevMessages, { text: data.text, isUser: false }]);
+        } else {
+          throw new Error('Invalid response from server');
+        }
       } catch (error) {
-        console.error('Error getting chat response:', error);
-        setError('Unable to get a response. Please try again later.');
+        console.error('Error sending message:', error);
+        setError(`Unable to get a response: ${(error as Error).message || 'Unknown error'}. Please try again later.`);
       } finally {
         setIsLoading(false);
       }
     }
-  };
-
-  const getChatResponse = async (userInput: string): Promise<string> => {
-    try {
-      const response = await fetch('/.netlify/functions/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userInput, businesses }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (!data.text) {
-        throw new Error('Invalid response from server');
-      }
-      return data.text;
-    } catch (error) {
-      console.error('Error in getChatResponse:', error);
-      throw error;
-    }
-  };
-
-  const handleVoiceInput = () => {
-    setIsListening(true);
-    // Implement speech-to-text functionality here
-  };
-
-  const handleTextToSpeech = (text: string) => {
-    setIsSpeaking(true);
-    // Implement text-to-speech functionality here
   };
 
   return (
@@ -104,35 +73,19 @@ const App: React.FC = () => {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
+            onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSendMessage()}
             className="flex-grow p-3 text-xl border rounded-lg md:rounded-r-none focus:outline-none focus:ring-2 focus:ring-[#b7964d] mb-2 md:mb-0 w-full md:w-auto"
             placeholder="Tell us what you need..."
             disabled={isLoading}
           />
-          <div className="flex w-full md:w-auto">
-            <button
-              onClick={handleSendMessage}
-              className="bg-[#b7964d] text-white p-3 rounded-lg md:rounded-l-none hover:bg-[#a58743] focus:outline-none focus:ring-2 focus:ring-[#b7964d] disabled:bg-[#d9c7a3] flex-grow md:flex-grow-0"
-              disabled={isLoading}
-            >
-              <MessageSquare size={24} className="mx-auto" />
-            </button>
-            <button
-              onClick={handleVoiceInput}
-              className="ml-2 bg-[#b7964d] text-white p-3 rounded-lg hover:bg-[#a58743] focus:outline-none focus:ring-2 focus:ring-[#b7964d] disabled:bg-[#d9c7a3]"
-              disabled={isLoading}
-            >
-              <Mic size={24} />
-            </button>
-            <button
-              onClick={() => handleTextToSpeech(messages[messages.length - 1]?.text)}
-              className="ml-2 bg-[#b7964d] text-white p-3 rounded-lg hover:bg-[#a58743] focus:outline-none focus:ring-2 focus:ring-[#b7964d] disabled:bg-[#d9c7a3]"
-              disabled={isLoading || messages.length === 0}
-            >
-              <Volume2 size={24} />
-            </button>
-          </div>
+          <button
+            onClick={handleSendMessage}
+            className="bg-[#b7964d] text-white p-3 rounded-lg md:rounded-l-none hover:bg-[#a58743] focus:outline-none focus:ring-2 focus:ring-[#b7964d] w-full md:w-auto"
+            disabled={isLoading}
+          >
+            Send
+          </button>
         </div>
       </main>
       <footer className="bg-gray-200 p-4 text-center">
